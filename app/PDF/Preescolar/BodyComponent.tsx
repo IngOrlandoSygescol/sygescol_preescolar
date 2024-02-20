@@ -1,0 +1,159 @@
+"use client"
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import ReactSelect from "react-select";
+import { BlobProvider } from "@react-pdf/renderer";
+import MyResult from "./MyResult";
+
+function BodyComponent() {
+  const [per, setPer] = useState({ idPeriodo: 0 });
+  const [docente, setDocente] = useState([]);
+  const [idDocente, setIdDocente] = useState({ idDcte: 0, nameDocente: '' });
+  const [dataPer, setDataPer] = useState<any>(null); // Establecer un tipo inicial any
+  const [data, setData] = useState({});
+  const [dataInfo, setInfo] = useState(null);
+  const [firma, setFirma] = useState(null);
+
+  const periodosRector = [
+    { label: '1', value: 1 },
+    { label: '2', value: 2 },
+    { label: '3', value: 3 },
+    { label: '4', value: 4 }
+  ]
+
+  const GetInfoBase = async () => {
+    setData(JSON.parse(localStorage?.datosColegio || "{}"));
+    try {
+      if (localStorage.getItem('rol') !== '1') {
+        const response = await axios.get(
+          `/api/PDF/Boletines/Preescolar/GetPeriodos?c=${localStorage.colegio}&g=${JSON.parse(localStorage?.Grupo)?.grupo_id}`
+        );
+        if (response.status === 200) {
+          setDataPer(response.data);
+        }
+      } else {
+        const response = await axios.get(`/api/Docentes?colegio=${localStorage.colegio}`);
+        setDocente(response.data);
+      }
+
+    } catch (error) {
+      console.error(error);
+      alert("Existe un error al consultar la información 2");
+    }
+  };
+
+  const GetDataStudents = async () => {
+    try {
+
+      if (localStorage.getItem('rol') === '1') {
+        localStorage.setItem('firma', idDocente.nameDocente)
+        const response = await axios.get(
+          `/api/PDF/Boletines/Preescolar/GetStudentsRector?c=${localStorage.colegio}&d=${idDocente.idDcte}&p=${per.idPeriodo}`
+        );
+        if (response.status === 200) { setInfo(response.data) }
+      } else {
+        setFirma(JSON.parse(localStorage?.datosUsu)?.firma);
+
+        const response = await axios.get(
+          `/api/PDF/Boletines/Preescolar/GetStudents?c=${localStorage.colegio}&g=${JSON.parse(localStorage?.Grupo)?.grupo_id}&p=${per.idPeriodo}`
+        );
+
+        console.log(response.data);
+        
+        if (response.status === 200) { setInfo(response.data) }
+      }
+
+    } catch (error) {
+      console.error(error);
+      alert("Existe un error al consultar la información 3");
+    }
+  };
+
+  useEffect(() => { GetInfoBase() }, []);
+
+  if (localStorage.getItem('rol') === '1') {
+    useEffect(() => { if (idDocente.idDcte !== 0) GetDataStudents() }, [idDocente]);
+  } else {
+    useEffect(() => { if (per.idPeriodo !== 0) GetDataStudents() }, [per]);
+  }
+
+  function eliminarDuplicados(arr: any) {
+
+    if (Array.isArray(arr)) {
+      let resultado: any = [];
+      for (let i = 0; i < arr.length; i++) {
+        if (!resultado.some((obj: any) => JSON.stringify(obj) === JSON.stringify(arr[i]))) {
+          resultado.push(arr[i]);
+        }
+      }
+      return resultado;
+    }
+
+  }
+
+  return (
+    <>
+      <div className="uppercase text-center font-bold lg:text-2xl py-4 bg-blue-900 text-white rounded-b-2xl">
+        Impresión de boletines de Preescolar
+      </div>
+      <div className="container mx-auto bg-light-blue-200 w-3/5 rounded-md mt-5 p-2">
+        <div className="text-2xl font-bold text-center p-2">
+          Seleccione el periodo al cual desea generar boletines
+        </div>
+
+        {localStorage.getItem('rol') === '1' ? (
+          <>
+
+            <ReactSelect
+              className="mb-4"
+              options={periodosRector}
+              onChange={(e: any) => { setPer({ ...per, idPeriodo: e.value }) }}
+            />
+            <div className="text-2xl font-bold text-center p-2">
+              Seleccione el docente
+            </div>
+            <ReactSelect
+              className="mb-4"
+              options={docente}
+              onChange={(e: any) => { setIdDocente({ ...idDocente, idDcte: e.value, nameDocente: e.label }) }}
+            />
+
+          </>
+        ) : (
+          <ReactSelect
+            className="mb-4"
+            options={eliminarDuplicados(dataPer?.periodos) || []}
+            onChange={(e: any) => { setPer({ ...per, idPeriodo: e.value }) }}
+          />
+        )}
+
+        {dataInfo && Object.keys(dataInfo).length > 0 && (
+          <>
+            <BlobProvider
+              document={
+                <MyResult InfoPdf={dataInfo} data={data} firma={firma} per={per} />
+              }
+            >
+              {({ url, loading }: any) =>
+                loading ? (
+                  "Cargando boletín..."
+                ) : (
+                  <a
+                    className="mt-8 bg-blue-500 px-10 w-full py-3 rounded-xl text-white shadow-xl hover:shadow-inner focus:outline-none transition duration-500 ease-in-out transform hover:-translate-x hover:scale-105"
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Ver Reporte
+                  </a>
+                )
+              }
+            </BlobProvider>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+export default BodyComponent;
